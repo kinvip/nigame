@@ -289,11 +289,13 @@ function renderResult(p1,p2){
   document.getElementById('resultRoomInfo').innerText = `共 ${TOTAL_ROUND} 轮 · 匹配${matchCount}轮 · 默契度 ${rate}%`
 }
 
+// 点击再来一局按钮
 function resetGame(){
   conn.send({type:'reset'});
   resetView();
 }
 
+// 重置视图与全部状态，房主、访客都完整清空remote数据
 function resetView(){
   clearInterval(timer);
   countBox.innerText='';
@@ -305,6 +307,7 @@ function resetView(){
   remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
   writeArea.style.display = 'block';
   resultArea.style.display = 'none';
+  // 只有房主才广播开启新一轮
   if(isCreator){
     conn.send({type:'startGame'});
   }

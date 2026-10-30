@@ -1,318 +1,346 @@
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SAME WORD - 同词相遇</title>
+<title>默契联想 - 联机版</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+<!-- simple-peer 用来做webrtc点对点 -->
+<script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.1/simplepeer.min.js"></script>
+<!-- 公共信令：使用开源共享的简易信令服务 -->
+<script src="https://cdn.jsdelivr.net/npm/socket.io@4.7.2/dist/socket.io.min.js"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        primary: '#704b99',
+        lightPurple: '#e9e2f7',
+        lightGreen: '#e2f4f0',
+        textGray: '#777085',
+      },
+      fontFamily: { sans: ['system-ui', 'sans-serif'] }
+    }
+  }
+}
+</script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
-body{background:#f7f4ff;padding:20px;}
-.wrap{max-width:420px;margin:0 auto;background:#fff;border-radius:24px;padding:24px;box-shadow:0 4px 20px #00000008;}
-.title-top{color:#7b42d9;text-align:center;font-size:16px;margin-bottom:8px;}
-h1{text-align:center;font-size:28px;color:#222;margin-bottom:10px;}
-.info{text-align:center;color:#666;margin-bottom:12px;font-size:15px;}
-.countdown{text-align:center;font-size:22px;color:#d63031;font-weight:bold;margin:10px 0;}
-.tip{text-align:center;color:#e64340;margin:10px 0}
-.success-tip{text-align:center;color:#209c57;margin:10px 0}
-.wait-tip{text-align:center;color:#8b5cf6;font-weight:bold;margin:8px 0;}
-.peer-submit-tip{text-align:center;color:#d97706;font-weight:bold;margin:8px 0;}
-.round-item{margin-bottom:16px;}
-.round-label{font-size:14px;color:#777;margin-bottom:6px;}
-input{width:100%;padding:14px 12px;border-radius:14px;border:1px solid #e9e4f4;font-size:16px;outline:none;background:#f9f6ff;}
-input:focus{border-color:#b898e8;}
-.btn-box{text-align:center;margin-top:24px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
-button{padding:14px 22px;border:none;border-radius:16px;background:#7b42d9;color:#fff;font-size:16px;cursor:pointer;}
-button:active{opacity:0.85;}
-button:disabled{background:#c9b8e6;cursor:not-allowed;}
-.result-box{display:none;margin-top:20px;}
-.res-row{display:flex;gap:10px;align-items:center;margin-bottom:14px;}
-.res-left,.res-right{flex:1;padding:14px 10px;border-radius:14px;text-align:center;font-size:18px;}
-.res-left{background:#efe9ff;color:#5b27b4;}
-.res-right{background:#e6f7f9;color:#228b94;}
-.match{background:#d8f6ec;color:#198754;font-weight:bold;}
-.cross{color:#999;font-weight:bold;}
-.tip-bottom{text-align:center;margin-top:24px;color:#888;font-size:14px;}
-.start-area{text-align:center;margin-top:30px;}
-.room-input{width:70%;display:inline-block;margin-bottom:12px;}
-.key-text{word-break:break-all;padding:10px;background:#f3f0ff;border-radius:12px;margin:10px 0;font-size:14px;}
+  @layer utilities {
+    .shadow-soft { box-shadow: 0 1px 8px rgba(0,0,0,0.04); }
+  }
+  body { background-color: #faf8f5; }
+  .page { display: none; }
+  .page.active { display: block; }
 </style>
 </head>
-<body>
-<div class="wrap">
-<div class="title-top">SAME WORD - 同词相遇</div>
-<h1>你们的脑回路相遇了</h1>
-<div class="info" id="roomInfo">等待配对</div>
-<div class="countdown" id="countBox"></div>
-<div class="wait-tip" id="waitTip"></div>
-<div class="peer-submit-tip" id="peerSubmitTip"></div>
-<div class="tip" id="tipBox"></div>
-<div class="success-tip" id="successBox"></div>
-<div id="startArea" class="start-area">
-<button onclick="createPeer()">创建房间</button>
-<div style="margin:16px 0">—— 或者粘贴密钥加入 ——</div>
-<input class="room-input" id="inputKey" placeholder="粘贴对方密钥">
-<button onclick="joinPeer()">加入房间</button>
-<div id="keyShow" class="key-text" style="display:none"></div>
+<body class="min-h-screen">
+
+<!-- ========== 页面1：首页 玩法说明 ========== -->
+<div id="page-home" class="page active">
+  <div class="flex items-center justify-between px-4 py-5">
+    <div onclick="showPage('page-home')"><i class="fa fa-angle-left text-xl"></i></div>
+    <div class="text-lg font-medium">玩法说明</div>
+    <div></div>
+  </div>
+  <div class="px-6">
+    <div class="mb-6">
+      <h1 class="text-[clamp(1.8rem,5vw,2.4rem)] font-bold text-primary leading-tight">
+        从各想各的，<br>到想到一起。
+      </h1>
+      <p class="mt-3 text-textGray text-base">四步，找到你们的共同联想。</p>
+    </div>
+    <div class="bg-white rounded-2xl p-5 shadow-soft">
+      <div class="border-b border-gray-100 py-4">
+        <div class="flex items-start gap-3">
+          <span class="bg-lightPurple text-primary w-8 h-8 rounded-full flex items-center justify-center font-medium shrink-0">1</span>
+          <div>
+            <h2 class="text-lg font-semibold">叫上朋友，一起入座</h2>
+            <p class="text-textGray mt-2 text-sm leading-relaxed">创建 2-4 人房间，通过分享房间码邀请朋友。人数到齐且全员在线后，由房主开始。</p>
+          </div>
+        </div>
+      </div>
+      <div class="border-b border-gray-100 py-4">
+        <div class="flex items-start gap-3">
+          <span class="bg-lightPurple text-primary w-8 h-8 rounded-full flex items-center justify-center font-medium shrink-0">2</span>
+          <div>
+            <h2 class="text-lg font-semibold">各想一个词，先藏好答案</h2>
+            <p class="text-textGray mt-2 text-sm leading-relaxed">第一轮自由联想，写下你想到的词。答案在揭晓前彼此保密，提交后不能修改。</p>
+          </div>
+        </div>
+      </div>
+      <div class="border-b border-gray-100 py-4">
+        <div class="flex items-start gap-3">
+          <span class="bg-lightPurple text-primary w-8 h-8 rounded-full flex items-center justify-center font-medium shrink-0">3</span>
+          <div>
+            <h2 class="text-lg font-semibold">同时揭晓，继续靠近</h2>
+            <p class="text-textGray mt-2 text-sm leading-relaxed">全员提交后一起揭晓。没想到一起，就从这一轮的词继续联想；全员确认继续后，进入下一轮。</p>
+          </div>
+        </div>
+      </div>
+      <div class="py-4">
+        <div class="flex items-start gap-3">
+          <span class="bg-lightPurple text-primary w-8 h-8 rounded-full flex items-center justify-center font-medium shrink-0">4</span>
+          <div>
+            <h2 class="text-lg font-semibold">同一个词，就是默契</h2>
+            <p class="text-textGray mt-2 text-sm leading-relaxed">所有人写出相同的非空词语就成功！不限轮数，只忽略词语首尾的空格，同义词不自动算作相同答案。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl p-6 mt-5 shadow-soft text-center">
+      <p class="text-textGray text-sm mb-5">比如这一轮</p>
+      <div class="flex justify-center items-center gap-4 mb-5">
+        <span class="bg-lightPurple text-primary px-5 py-2 rounded-xl text-lg">大海</span>
+        <span class="text-textGray">×</span>
+        <span class="bg-lightGreen text-teal-600 px-5 py-2 rounded-xl text-lg">天空</span>
+      </div>
+      <p class="text-textGray text-sm mb-3">下一轮，都想到了</p>
+      <p class="text-green-600 text-xl font-medium">蓝色 ✓</p>
+    </div>
+    <div class="mt-8 space-y-4">
+      <button onclick="showPage('page-create')" class="w-full bg-primary text-white py-3 rounded-xl font-medium">🎮 创建房间</button>
+      <button onclick="showPage('page-join')" class="w-full bg-white border border-primary text-primary py-3 rounded-xl font-medium">🤝 加入房间</button>
+    </div>
+  </div>
 </div>
-<div id="writeArea" style="display:none">
-<div class="round-item">
-<div class="round-label" id="curRoundLabel">第 1 轮，请输入词语</div>
-<input id="curInput" placeholder="在这里输入本轮词语">
+
+<!-- ========== 页面2：创建房间 ========== -->
+<div id="page-create" class="page">
+  <div class="flex items-center justify-between px-4 py-5">
+    <div onclick="showPage('page-home')"><i class="fa fa-angle-left text-xl"></i></div>
+    <div class="text-lg font-medium">创建房间</div>
+    <div></div>
+  </div>
+  <div class="px-6">
+    <div class="bg-white rounded-2xl p-6 shadow-soft">
+      <label class="block mb-2 font-medium">你的昵称</label>
+      <input id="host-name" class="w-full border rounded-lg px-3 py-2 mb-4" placeholder="输入昵称">
+      <label class="block mb-2 font-medium">房间人数（2~4）</label>
+      <select id="max-player" class="w-full border rounded-lg px-3 py-2 mb-6">
+        <option value="2">2人</option>
+        <option value="3">3人</option>
+        <option value="4">4人</option>
+      </select>
+      <button onclick="createRoom()" class="w-full bg-primary text-white py-3 rounded-xl">创建并等待好友加入</button>
+    </div>
+    <div id="room-wait" class="hidden mt-5 bg-white rounded-2xl p-5 shadow-soft">
+      <p class="font-medium">房间码：<span id="room-code" class="text-xl text-primary"></span></p>
+      <p class="text-sm text-textGray mt-2">把房间码发给朋友，让他们加入</p>
+      <div class="mt-3">
+        <p class="font-medium">在线玩家：</p>
+        <div id="player-list" class="mt-2 space-y-2"></div>
+      </div>
+      <button id="start-btn" onclick="startGame()" class="w-full mt-5 bg-green-500 text-white py-3 rounded-xl disabled:bg-gray-300" disabled>全员到齐，开始游戏</button>
+    </div>
+  </div>
 </div>
-<div class="btn-box">
-<button id="submitBtn" onclick="submitRound()">提交本轮</button>
+
+<!-- ========== 页面3：加入房间 ========== -->
+<div id="page-join" class="page">
+  <div class="flex items-center justify-between px-4 py-5">
+    <div onclick="showPage('page-home')"><i class="fa fa-angle-left text-xl"></i></div>
+    <div class="text-lg font-medium">加入房间</div>
+    <div></div>
+  </div>
+  <div class="px-6">
+    <div class="bg-white rounded-2xl p-6 shadow-soft">
+      <label class="block mb-2 font-medium">你的昵称</label>
+      <input id="join-name" class="w-full border rounded-lg px-3 py-2 mb-4" placeholder="输入昵称">
+      <label class="block mb-2 font-medium">房间码</label>
+      <input id="join-code" class="w-full border rounded-lg px-3 py-2 mb-6" placeholder="输入房主给你的房间码">
+      <button onclick="joinRoom()" class="w-full bg-primary text-white py-3 rounded-xl">加入房间</button>
+    </div>
+    <div id="join-wait" class="hidden mt-5 bg-white rounded-2xl p-5 shadow-soft">
+      <p class="font-medium">等待房主开启游戏...</p>
+      <div class="mt-3">
+        <p class="font-medium">在线玩家：</p>
+        <div id="join-player-list" class="mt-2 space-y-2"></div>
+      </div>
+    </div>
+  </div>
 </div>
+
+<!-- ========== 页面4：游戏对局页 ========== -->
+<div id="page-game" class="page">
+  <div class="flex items-center justify-between px-4 py-5">
+    <div onclick="leaveRoom()"><i class="fa fa-sign-out text-xl"></i></div>
+    <div class="text-lg font-medium">默契联想对局</div>
+    <div>轮次：<span id="round-num">1</span></div>
+  </div>
+  <div class="px-6">
+    <div class="bg-white rounded-2xl p-5 shadow-soft mb-4">
+      <p class="font-medium">本轮提示词：<span id="tip-word" class="text-primary text-lg">无（首轮自由联想）</span></p>
+      <p class="text-sm text-textGray mt-1">每个人独立想词，提交后统一揭晓</p>
+    </div>
+    <div class="bg-white rounded-2xl p-5 shadow-soft mb-4">
+      <p class="font-medium mb-2">玩家列表</p>
+      <div id="game-player-list" class="space-y-2"></div>
+    </div>
+    <div class="bg-white rounded-2xl p-5 shadow-soft">
+      <label class="block mb-2 font-medium">写下你联想的词</label>
+      <input id="my-word" class="w-full border rounded-lg px-3 py-2 mb-4" placeholder="输入词语">
+      <button id="submit-word-btn" onclick="submitWord()" class="w-full bg-primary text-white py-3 rounded-xl">提交答案（提交后不可修改）</button>
+    </div>
+    <div id="result-panel" class="hidden mt-5 bg-white rounded-2xl p-5 shadow-soft">
+      <h3 class="font-bold text-lg mb-3">本轮揭晓结果</h3>
+      <div id="result-content" class="space-y-2 mb-4"></div>
+      <div id="win-tip" class="hidden text-green-600 font-bold text-xl mb-3">🎉 所有人想到同一个词！默契达成！</div>
+      <button id="next-round-btn" onclick="nextRound()" class="w-full bg-primary text-white py-3 rounded-xl">继续下一轮</button>
+    </div>
+  </div>
 </div>
-<div class="result-box" id="resultArea">
-<div class="result-title">你们的脑回路相遇了</div>
-<div class="result-sub" id="resultRoomInfo"></div>
-<div id="res-container"></div>
-<div class="tip-bottom">表达可以不同，只要想到的是同一个东西。</div>
-<div class="btn-box">
-<button onclick="resetGame()">再来一局</button>
-</div>
-</div>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
 <script>
-let peer, conn;
-const TOTAL_ROUND = 8;
-const ROUND_TIME = 90;
-let currentRound = 0;
-let myWords = Array(TOTAL_ROUND).fill('');
-let remoteWords = Array(TOTAL_ROUND).fill('');
-let myRoundSubmit = Array(TOTAL_ROUND).fill(false);
-let remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
-let timer = null;
-let remainSec = 0;
-let isCreator = false;
-let waitingAck = false; // 是否正在等待对方重置确认
+// 全局状态
+let socket, peerList = {}, roomCode, myName, isHost = false;
+let maxPlayer = 2, players = [], round = 1, tipWord = "无（首轮自由联想）";
+let submitMap = {};
+const STUN_CONFIG = {
+  iceServers: [
+    {urls: 'stun:stun.l.google.com:19302'},
+    {urls: 'stun:stun1.l.google.com:19302'}
+  ]
+};
 
-const tipBox = document.getElementById('tipBox');
-const successBox = document.getElementById('successBox');
-const waitTip = document.getElementById('waitTip');
-const peerSubmitTip = document.getElementById('peerSubmitTip');
-const roomInfo = document.getElementById('roomInfo');
-const startArea = document.getElementById('startArea');
-const writeArea = document.getElementById('writeArea');
-const resultArea = document.getElementById('resultArea');
-const resContainer = document.getElementById('res-container');
-const submitBtn = document.getElementById('submitBtn');
-const keyShow = document.getElementById('keyShow');
-const countBox = document.getElementById('countBox');
-const curRoundLabel = document.getElementById('curRoundLabel');
-const curInput = document.getElementById('curInput');
-
-function showTip(text){
-tipBox.innerText = text;
-setTimeout(()=>tipBox.innerText='',2500);
-}
-function showSuccess(text){
-successBox.innerText = text;
-setTimeout(()=>successBox.innerText='',2500);
-}
-function setWaitTip(text){
-waitTip.innerText = text;
-}
-function setPeerSubmitTip(text){
-peerSubmitTip.innerText = text;
-}
-function clearAllRoundTips(){
-setWaitTip('');
-setPeerSubmitTip('');
+// 页面切换
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
 }
 
-// 彻底清空所有游戏数据
-function fullClearData(){
-clearInterval(timer);
-countBox.innerText='';
-clearAllRoundTips();
-currentRound = 0;
-myWords = Array(TOTAL_ROUND).fill('');
-remoteWords = Array(TOTAL_ROUND).fill('');
-myRoundSubmit = Array(TOTAL_ROUND).fill(false);
-remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
-curInput.value = '';
-submitBtn.disabled = false;
+// 生成随机房间码 6位数字
+function genRoomCode(){
+  return String(Math.floor(100000 + Math.random()*900000));
 }
 
 // 创建房间
-function createPeer(){
-peer = new Peer();
-peer.on('open', (id)=>{
-roomInfo.innerText = `你的密钥：${id}`;
-keyShow.style.display = 'block';
-keyShow.innerText = id;
-showSuccess('✅ 把上面密钥发给好友，让他粘贴加入！');
-})
-peer.on('connection', (c)=>{
-conn = c;
-isCreator = true;
-bindConn();
-showSuccess('✅ 好友连上啦！游戏即将开始');
-startArea.style.display = 'none';
-writeArea.style.display = 'block';
-startNewRound();
-})
-peer.on('error', err=>{
-showTip('连接失败：'+err.type);
-})
+function createRoom(){
+  myName = document.getElementById('host-name').value.trim();
+  maxPlayer = Number(document.getElementById('max-player').value);
+  if(!myName) return alert("请输入昵称");
+  roomCode = genRoomCode();
+  isHost = true;
+  players = [{name:myName, id:'host', word:null, ready:false}];
+  socket = io("https://simple-webrtc-signal.vercel.app/");
+  socket.emit("create", roomCode);
+  socket.on("join", (data)=>{
+    players.push({name:data.name, id:data.id, word:null, ready:false});
+    renderWaitPlayer();
+    if(players.length >= maxPlayer) document.getElementById('start-btn').disabled = false;
+  })
+  socket.on("leave", (pid)=>{
+    players = players.filter(p=>p.id !== pid);
+    renderWaitPlayer();
+    document.getElementById('start-btn').disabled = players.length < maxPlayer;
+  })
+  document.getElementById('room-code').innerText = roomCode;
+  document.getElementById('room-wait').classList.remove('hidden');
+  renderWaitPlayer();
 }
 
 // 加入房间
-function joinPeer(){
-const rid = document.getElementById('inputKey').value.trim();
-if(!rid) return showTip('请粘贴密钥');
-peer = new Peer();
-peer.on('open', ()=>{
-conn = peer.connect(rid);
-isCreator = false;
-bindConn();
-})
+function joinRoom(){
+  myName = document.getElementById('join-name').value.trim();
+  roomCode = document.getElementById('join-code').value.trim();
+  if(!myName || !roomCode) return alert("昵称和房间码不能为空");
+  isHost = false;
+  socket = io("https://simple-webrtc-signal.vercel.app/");
+  socket.emit("enter", {room:roomCode, name:myName});
+  socket.on("roomInfo", (info)=>{
+    maxPlayer = info.max;
+    players = info.players;
+    document.getElementById('join-wait').classList.remove('hidden');
+    renderJoinPlayer();
+  })
+  socket.on("gameStart", ()=>{
+    startGameLocal();
+  })
+  socket.on("playerUpdate", (pList)=>{
+    players = pList; renderJoinPlayer();
+  })
 }
 
-function bindConn(){
-conn.on('open', ()=>{
-showSuccess('✅ 配对成功！等待游戏开始');
-startArea.style.display = 'none';
-writeArea.style.display = 'block';
-})
-conn.on('data', (data)=>{
-switch(data.type){
-case 'goNext':
-startNewRound();
-break;
-case 'gameOver':
-renderResult(myWords, remoteWords);
-writeArea.style.display = 'none';
-resultArea.style.display = 'block';
-break;
-case 'reset':
-// 收到重置指令：清空自己数据，回复ack
-fullClearData();
-writeArea.style.display = 'block';
-resultArea.style.display = 'none';
-showSuccess('🔄 准备新一局...');
-conn.send({type:'resetAck'});
-break;
-case 'resetAck':
-// 收到对方确认，发起方发送goNext开启第一轮
-if(waitingAck){
-waitingAck = false;
-conn.send({type:'goNext'});
-startNewRound();
+function renderWaitPlayer(){
+  const wrap = document.getElementById('player-list');
+  wrap.innerHTML = players.map(p=>`<div class="px-2 py-1 bg-lightPurple rounded-lg">${p.name} ${p.id==='host'?'(房主)':''}</div>`).join('');
 }
-break;
-case 'roundData':
-remoteWords[data.roundIdx] = data.word;
-remoteRoundSubmit[data.roundIdx] = true;
-if(!myRoundSubmit[data.roundIdx]){
-setPeerSubmitTip("🔔对方已经提交本轮，请尽快作答！");
-}
-if(isCreator){
-checkRoundEndByCreator();
-}
-break;
-}
-})
-conn.on('close', ()=>{
-clearInterval(timer);
-countBox.innerText='';
-clearAllRoundTips();
-showTip('对方断开连接了');
-})
-conn.on('error',err=>showTip('通讯异常'))
+function renderJoinPlayer(){
+  const wrap = document.getElementById('join-player-list');
+  wrap.innerHTML = players.map(p=>`<div class="px-2 py-1 bg-lightPurple rounded-lg">${p.name}</div>`).join('');
 }
 
-// 房主判断本轮两人都提交完成
-function checkRoundEndByCreator(){
-const idx = currentRound - 1;
-if(myRoundSubmit[idx] && remoteRoundSubmit[idx]){
-if(currentRound >= TOTAL_ROUND){
-conn.send({type:'gameOver'});
-renderResult(myWords, remoteWords);
-writeArea.style.display = 'none';
-resultArea.style.display = 'block';
-}else{
-conn.send({type:'goNext'});
-startNewRound();
+// 房主开启游戏
+function startGame(){
+  socket.emit("startGame");
+  startGameLocal();
 }
-}
+function startGameLocal(){
+  round = 1; tipWord = "无（首轮自由联想）"; submitMap = {};
+  showPage('page-game');
+  renderGamePanel();
 }
 
-function startNewRound(){
-clearInterval(timer);
-clearAllRoundTips();
-currentRound ++;
-if(currentRound > TOTAL_ROUND){
-return;
-}
-curRoundLabel.innerText = `第 ${currentRound} 轮，请输入词语`;
-curInput.value = '';
-submitBtn.disabled = false;
-remainSec = ROUND_TIME;
-countBox.innerText = `⏱ ${remainSec} 秒`;
-timer = setInterval(()=>{
-remainSec --;
-countBox.innerText = `⏱ ${remainSec} 秒`;
-if(remainSec <= 0){
-if(!myRoundSubmit[currentRound-1]){
-submitRound();
-}
-}
-},1000);
+function renderGamePanel(){
+  document.getElementById('round-num').innerText = round;
+  document.getElementById('tip-word').innerText = tipWord;
+  const wrap = document.getElementById('game-player-list');
+  wrap.innerHTML = players.map(p=>{
+    const sub = submitMap[p.id];
+    return `<div class="px-2 py-1 rounded-lg ${sub ? 'bg-lightGreen' : 'bg-gray-100'}">
+      ${p.name}：${sub ? '✅已提交' : '⏳等待提交'}
+    </div>`
+  }).join('');
 }
 
-function submitRound(){
-clearInterval(timer);
-countBox.innerText='';
-const w = curInput.value.trim();
-const idx = currentRound -1;
-myWords[idx] = w;
-myRoundSubmit[idx] = true;
-submitBtn.disabled = true;
-setWaitTip("✅已提交，正在等待对方完成本轮...");
-setPeerSubmitTip('');
-conn.send({type:'roundData', roundIdx:idx, word:w});
-if(isCreator){
-checkRoundEndByCreator();
-}
+// 提交词语
+function submitWord(){
+  const w = document.getElementById('my-word').value.trim();
+  if(!w) return alert("不能提交空词");
+  submitMap[isHost ? 'host' : socket.id] = w;
+  document.getElementById('submit-word-btn').disabled = true;
+  document.getElementById('my-word').disabled = true;
+  renderGamePanel();
+  // 所有人提交完成，揭晓
+  if(Object.keys(submitMap).length >= players.length){
+    showResult();
+  }
 }
 
-function renderResult(p1,p2){
-resContainer.innerHTML = '';
-for(let i=0;i<TOTAL_ROUND;i++){
-let v1 = p1[i] || '—';
-let v2 = p2[i] || '—';
-let isSame = v1 === v2 && v1 !== '—';
-let cls1 = isSame ? 'res-left match' : 'res-left';
-let cls2 = isSame ? 'res-right match' : 'res-right';
-resContainer.innerHTML += `
-<div class="round-item">
-<div class="round-label">第 ${i+1} 轮</div>
-<div class="res-row">
-<div class="${cls1}">${v1}</div>
-<span class="cross">×</span>
-<div class="${cls2}">${v2}</div>
-</div>
-</div>
-`
-}
-let matchCount = 0;
-for(let i=0;i<TOTAL_ROUND;i++){
-if(p1[i]&&p2[i]&&p1[i]===p2[i]) matchCount++;
-}
-let rate = Math.round(matchCount/TOTAL_ROUND*100);
-document.getElementById('resultRoomInfo').innerText = `共 ${TOTAL_ROUND} 轮 · 匹配${matchCount}轮 · 默契度 ${rate}%`
+function showResult(){
+  document.getElementById('result-panel').classList.remove('hidden');
+  const resWrap = document.getElementById('result-content');
+  resWrap.innerHTML = '';
+  let allWords = [];
+  for(const pid in submitMap){
+    const p = players.find(x=>x.id === pid || (x.id==='host' && pid==='host'));
+    const w = submitMap[pid];
+    resWrap.innerHTML += `<div>${p.name}：<span class="text-primary">${w}</span></div>`;
+    allWords.push(w);
+  }
+  // 判断是否全部相同
+  const allSame = allWords.every(v=>v === allWords[0]);
+  if(allSame){
+    document.getElementById('win-tip').classList.remove('hidden');
+  }else{
+    document.getElementById('win-tip').classList.add('hidden');
+    tipWord = allWords.join(" × ");
+  }
 }
 
-// 再来一局：任何人点击都可以发起重置
-function resetGame(){
-if(waitingAck) return;
-waitingAck = true;
-fullClearData();
-writeArea.style.display = 'block';
-resultArea.style.display = 'none';
-conn.send({type:'reset'});
+function nextRound(){
+  round++;
+  submitMap = {};
+  document.getElementById('result-panel').classList.add('hidden');
+  document.getElementById('submit-word-btn').disabled = false;
+  document.getElementById('my-word').disabled = false;
+  document.getElementById('my-word').value = '';
+  renderGamePanel();
+}
+
+function leaveRoom(){
+  socket?.disconnect();
+  showPage('page-home');
 }
 </script>
 </body>

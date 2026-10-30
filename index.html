@@ -15,6 +15,7 @@ h1{text-align:center;font-size:28px;color:#222;margin-bottom:10px;}
 .tip{text-align:center;color:#e64340;margin:10px 0}
 .success-tip{text-align:center;color:#209c57;margin:10px 0}
 .wait-tip{text-align:center;color:#8b5cf6;font-weight:bold;margin:8px 0;}
+.peer-submit-tip{text-align:center;color:#d97706;font-weight:bold;margin:8px 0;}
 .round-item{margin-bottom:16px;}
 .round-label{font-size:14px;color:#777;margin-bottom:6px;}
 input{width:100%;padding:14px 12px;border-radius:14px;border:1px solid #e9e4f4;font-size:16px;outline:none;background:#f9f6ff;}
@@ -43,6 +44,7 @@ button:disabled{background:#c9b8e6;cursor:not-allowed;}
   <div class="info" id="roomInfo">等待配对</div>
   <div class="countdown" id="countBox"></div>
   <div class="wait-tip" id="waitTip"></div>
+  <div class="peer-submit-tip" id="peerSubmitTip"></div>
   <div class="tip" id="tipBox"></div>
   <div class="success-tip" id="successBox"></div>
 
@@ -95,6 +97,7 @@ let isCreator = false;
 const tipBox = document.getElementById('tipBox');
 const successBox = document.getElementById('successBox');
 const waitTip = document.getElementById('waitTip');
+const peerSubmitTip = document.getElementById('peerSubmitTip');
 const roomInfo = document.getElementById('roomInfo');
 const startArea = document.getElementById('startArea');
 const writeArea = document.getElementById('writeArea');
@@ -116,6 +119,13 @@ function showSuccess(text){
 }
 function setWaitTip(text){
   waitTip.innerText = text;
+}
+function setPeerSubmitTip(text){
+  peerSubmitTip.innerText = text;
+}
+function clearAllRoundTips(){
+  setWaitTip('');
+  setPeerSubmitTip('');
 }
 
 // 创建房间
@@ -167,6 +177,10 @@ function bindConn(){
       case 'roundData':
         remoteWords[data.roundIdx] = data.word;
         remoteRoundSubmit[data.roundIdx] = true;
+        // 如果自己还没提交，弹出对方已提交提醒
+        if(!myRoundSubmit[data.roundIdx]){
+          setPeerSubmitTip("🔔对方已经提交本轮，请尽快作答！");
+        }
         if(isCreator){
           checkRoundEndByCreator();
         }
@@ -187,7 +201,7 @@ function bindConn(){
   conn.on('close', ()=>{
     clearInterval(timer);
     countBox.innerText='';
-    setWaitTip('');
+    clearAllRoundTips();
     showTip('对方断开连接了');
   })
   conn.on('error',err=>showTip('通讯异常'))
@@ -211,7 +225,7 @@ function checkRoundEndByCreator(){
 
 function startNewRound(){
   clearInterval(timer);
-  setWaitTip(''); //清除等待提示
+  clearAllRoundTips();
   currentRound ++;
   if(currentRound > TOTAL_ROUND){
     return;
@@ -241,8 +255,8 @@ function submitRound(){
   myRoundSubmit[idx] = true;
   submitBtn.disabled = true;
   setWaitTip("✅已提交，正在等待对方完成本轮...");
+  setPeerSubmitTip('');
   conn.send({type:'roundData', roundIdx:idx, word:w});
-  // 加入方不能判断回合结束！只有房主判断
   if(isCreator){
     checkRoundEndByCreator();
   }
@@ -283,7 +297,7 @@ function resetGame(){
 function resetView(){
   clearInterval(timer);
   countBox.innerText='';
-  setWaitTip('');
+  clearAllRoundTips();
   currentRound = 0;
   myWords = Array(TOTAL_ROUND).fill('');
   remoteWords = Array(TOTAL_ROUND).fill('');

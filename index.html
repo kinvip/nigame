@@ -85,6 +85,7 @@ let remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
 let timer = null;
 let remainSec = 0;
 let isCreator = false;
+let waitingAck = false; // 是否正在等待对方重置确认
 
 const tipBox = document.getElementById('tipBox');
 const successBox = document.getElementById('successBox');
@@ -120,6 +121,20 @@ setWaitTip('');
 setPeerSubmitTip('');
 }
 
+// 彻底清空所有游戏数据
+function fullClearData(){
+clearInterval(timer);
+countBox.innerText='';
+clearAllRoundTips();
+currentRound = 0;
+myWords = Array(TOTAL_ROUND).fill('');
+remoteWords = Array(TOTAL_ROUND).fill('');
+myRoundSubmit = Array(TOTAL_ROUND).fill(false);
+remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
+curInput.value = '';
+submitBtn.disabled = false;
+}
+
 // 创建房间
 function createPeer(){
 peer = new Peer();
@@ -136,7 +151,7 @@ bindConn();
 showSuccess('✅ 好友连上啦！游戏即将开始');
 startArea.style.display = 'none';
 writeArea.style.display = 'block';
-startNewRound(); 
+startNewRound();
 })
 peer.on('error', err=>{
 showTip('连接失败：'+err.type);
@@ -172,7 +187,20 @@ writeArea.style.display = 'none';
 resultArea.style.display = 'block';
 break;
 case 'reset':
-resetView();
+// 收到重置指令：清空自己数据，回复ack
+fullClearData();
+writeArea.style.display = 'block';
+resultArea.style.display = 'none';
+showSuccess('🔄 准备新一局...');
+conn.send({type:'resetAck'});
+break;
+case 'resetAck':
+// 收到对方确认，发起方发送goNext开启第一轮
+if(waitingAck){
+waitingAck = false;
+conn.send({type:'goNext'});
+startNewRound();
+}
 break;
 case 'roundData':
 remoteWords[data.roundIdx] = data.word;
@@ -277,25 +305,14 @@ let rate = Math.round(matchCount/TOTAL_ROUND*100);
 document.getElementById('resultRoomInfo').innerText = `共 ${TOTAL_ROUND} 轮 · 匹配${matchCount}轮 · 默契度 ${rate}%`
 }
 
+// 再来一局：任何人点击都可以发起重置
 function resetGame(){
-conn.send({type:'reset'});
-resetView();
-}
-
-function resetView(){
-clearInterval(timer);
-countBox.innerText='';
-clearAllRoundTips();
-currentRound = 0;
-myWords = Array(TOTAL_ROUND).fill('');
-remoteWords = Array(TOTAL_ROUND).fill('');
-myRoundSubmit = Array(TOTAL_ROUND).fill(false);
-remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
+if(waitingAck) return;
+waitingAck = true;
+fullClearData();
 writeArea.style.display = 'block';
 resultArea.style.display = 'none';
-if(isCreator){
-startNewRound();
-}
+conn.send({type:'reset'});
 }
 </script>
 </body>

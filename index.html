@@ -93,7 +93,7 @@ let remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
 let timer = null;
 let remainSec = 0;
 let isCreator = false;
-let gameSessionId = 0; // 局号，每开一局+1
+let gameFinished = false; //标记本局游戏是否已经全部结束
 
 const tipBox = document.getElementById('tipBox');
 const successBox = document.getElementById('successBox');
@@ -145,7 +145,7 @@ function createPeer(){
     showSuccess('✅ 好友连上啦！游戏即将开始');
     startArea.style.display = 'none';
     writeArea.style.display = 'block';
-    newGameSession();
+    conn.send({type:'startGame'});
   })
   peer.on('error', err=>{
     showTip('连接失败：'+err.type);
@@ -164,13 +164,6 @@ function joinPeer(){
   })
 }
 
-// 开启新一局，更新session
-function newGameSession(){
-  gameSessionId += 1;
-  resetView();
-  conn.send({type:'startGame', sid: gameSessionId});
-}
-
 function bindConn(){
   conn.on('open', ()=>{
     showSuccess('✅ 配对成功！等待游戏开始');
@@ -178,21 +171,23 @@ function bindConn(){
     writeArea.style.display = 'block';
   })
   conn.on('data', (data)=>{
+    // 如果本局已经结束，忽略旧延迟到达的网络消息
+    if(gameFinished && data.type !== 'reset' && data.type !== 'startGame') return;
+
     switch(data.type){
       case 'startGame':
-        gameSessionId = data.sid;
+        //收到开局信号，强制切回填词界面
+        resultArea.style.display = 'none';
+        writeArea.style.display = 'block';
         startNewRound();
         break;
       case 'roundData':
-        // 关键：不是当前局的消息直接丢弃！解决延迟旧消息乱入
-        if(data.sid !== gameSessionId) return;
         remoteWords[data.roundIdx] = data.word;
         remoteRoundSubmit[data.roundIdx] = true;
-        // 如果自己还没提交，弹出对方已提交提醒
         if(!myRoundSubmit[data.roundIdx]){
           setPeerSubmitTip("🔔对方已经提交本轮，请尽快作答！");
         }
-        if(isCreator){
+        if(isCreator && !gameFinished){
           checkRoundEndByCreator();
         }
         break;
@@ -200,6 +195,7 @@ function bindConn(){
         startNewRound();
         break;
       case 'gameOver':
+        gameFinished = true;
         renderResult(myWords, remoteWords);
         writeArea.style.display = 'none';
         resultArea.style.display = 'block';
@@ -223,12 +219,13 @@ function checkRoundEndByCreator(){
   const idx = currentRound - 1;
   if(myRoundSubmit[idx] && remoteRoundSubmit[idx]){
     if(currentRound >= TOTAL_ROUND){
-      conn.send({type:'gameOver', sid: gameSessionId});
+      gameFinished = true;
+      conn.send({type:'gameOver'});
       renderResult(myWords, remoteWords);
       writeArea.style.display = 'none';
       resultArea.style.display = 'block';
     }else{
-      conn.send({type:'goNext', sid: gameSessionId});
+      conn.send({type:'goNext'});
       startNewRound();
     }
   }
@@ -238,6 +235,7 @@ function startNewRound(){
   clearInterval(timer);
   clearAllRoundTips();
   currentRound ++;
+  // 超过总轮数直接返回，不再继续
   if(currentRound > TOTAL_ROUND){
     return;
   }
@@ -267,9 +265,8 @@ function submitRound(){
   submitBtn.disabled = true;
   setWaitTip("✅已提交，正在等待对方完成本轮...");
   setPeerSubmitTip('');
-  // 提交消息带上本局sid
-  conn.send({type:'roundData', roundIdx:idx, word:w, sid: gameSessionId});
-  if(isCreator){
+  conn.send({type:'roundData', roundIdx:idx, word:w});
+  if(isCreator && !gameFinished){
     checkRoundEndByCreator();
   }
 }
@@ -304,11 +301,7 @@ function renderResult(p1,p2){
 // 点击再来一局按钮
 function resetGame(){
   conn.send({type:'reset'});
-  if(isCreator){
-    newGameSession();
-  }else{
-    resetView();
-  }
+  resetView();
 }
 
 // 重置视图与全部状态，房主、访客都完整清空remote数据
@@ -321,8 +314,13 @@ function resetView(){
   remoteWords = Array(TOTAL_ROUND).fill('');
   myRoundSubmit = Array(TOTAL_ROUND).fill(false);
   remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
+  gameFinished = false; //重置游戏结束标记
   writeArea.style.display = 'block';
   resultArea.style.display = 'none';
+  // 只有房主才广播开启新一轮
+  if(isCreator){
+    conn.send({type:'startGame'});
+  }
 }
 </script>
 </body>

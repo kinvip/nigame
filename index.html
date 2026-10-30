@@ -88,6 +88,7 @@ let myRoundSubmit = Array(TOTAL_ROUND).fill(false);
 let remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
 let timer = null;
 let remainSec = 0;
+let isCreator = false; //标记是否是创建房间的人
 
 const tipBox = document.getElementById('tipBox');
 const successBox = document.getElementById('successBox');
@@ -122,11 +123,12 @@ function createPeer(){
   })
   peer.on('connection', (c)=>{
     conn = c;
+    isCreator = true; //创建者标记
     bindConn();
     showSuccess('✅ 好友连上啦！游戏即将开始');
     startArea.style.display = 'none';
     writeArea.style.display = 'block';
-    startNewRound();
+    conn.send({type:'startGame'}); //发送消息通知双方开启第一轮
   })
   peer.on('error', err=>{
     showTip('连接失败：'+err.type);
@@ -140,19 +142,22 @@ function joinPeer(){
   peer = new Peer();
   peer.on('open', ()=>{
     conn = peer.connect(rid);
+    isCreator = false; //加入方，不主动开启回合
     bindConn();
   })
 }
 
 function bindConn(){
   conn.on('open', ()=>{
-    showSuccess('✅ 配对成功！游戏即将开始');
+    showSuccess('✅ 配对成功！等待游戏开始');
     startArea.style.display = 'none';
     writeArea.style.display = 'block';
-    startNewRound();
+    // 加入方不调用startNewRound，等待对方消息
   })
   conn.on('data', (data)=>{
-    if(data.type === 'roundData'){
+    if(data.type === 'startGame'){
+      startNewRound(); //收到信号统一开启第一轮
+    }else if(data.type === 'roundData'){
       remoteWords[data.roundIdx] = data.word;
       remoteRoundSubmit[data.roundIdx] = true;
       checkRoundEnd();
@@ -275,7 +280,7 @@ function resetView(){
   remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
   writeArea.style.display = 'block';
   resultArea.style.display = 'none';
-  startNewRound();
+  conn.send({type:'startGame'}); //重置后重新发送开启游戏信号
 }
 </script>
 </body>

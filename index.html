@@ -80,7 +80,7 @@ button:disabled{background:#c9b8e6;cursor:not-allowed;}
 <script>
 let peer, conn;
 const TOTAL_ROUND = 8;
-const ROUND_TIME = 90; //每轮倒计时秒数
+const ROUND_TIME = 90;
 let currentRound = 0;
 let myWords = Array(TOTAL_ROUND).fill('');
 let remoteWords = Array(TOTAL_ROUND).fill('');
@@ -88,7 +88,7 @@ let myRoundSubmit = Array(TOTAL_ROUND).fill(false);
 let remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
 let timer = null;
 let remainSec = 0;
-let isCreator = false; //标记是否是创建房间的人
+let isCreator = false;
 
 const tipBox = document.getElementById('tipBox');
 const successBox = document.getElementById('successBox');
@@ -123,12 +123,12 @@ function createPeer(){
   })
   peer.on('connection', (c)=>{
     conn = c;
-    isCreator = true; //创建者标记
+    isCreator = true;
     bindConn();
     showSuccess('✅ 好友连上啦！游戏即将开始');
     startArea.style.display = 'none';
     writeArea.style.display = 'block';
-    conn.send({type:'startGame'}); //发送消息通知双方开启第一轮
+    conn.send({type:'startGame'});
   })
   peer.on('error', err=>{
     showTip('连接失败：'+err.type);
@@ -142,7 +142,7 @@ function joinPeer(){
   peer = new Peer();
   peer.on('open', ()=>{
     conn = peer.connect(rid);
-    isCreator = false; //加入方，不主动开启回合
+    isCreator = false;
     bindConn();
   })
 }
@@ -152,23 +152,31 @@ function bindConn(){
     showSuccess('✅ 配对成功！等待游戏开始');
     startArea.style.display = 'none';
     writeArea.style.display = 'block';
-    // 加入方不调用startNewRound，等待对方消息
   })
   conn.on('data', (data)=>{
-    if(data.type === 'startGame'){
-      startNewRound(); //收到信号统一开启第一轮
-    }else if(data.type === 'roundData'){
-      remoteWords[data.roundIdx] = data.word;
-      remoteRoundSubmit[data.roundIdx] = true;
-      checkRoundEnd();
-    }else if(data.type === 'nextRound'){
-      startNewRound();
-    }else if(data.type === 'showFinal'){
-      renderResult(myWords, remoteWords);
-      writeArea.style.display = 'none';
-      resultArea.style.display = 'block';
-    }else if(data.type === 'reset'){
-      resetView();
+    switch(data.type){
+      case 'startGame':
+        startNewRound();
+        break;
+      case 'roundData':
+        remoteWords[data.roundIdx] = data.word;
+        remoteRoundSubmit[data.roundIdx] = true;
+        // 只有房主才判断双提交，控制回合
+        if(isCreator){
+          checkRoundEndByCreator();
+        }
+        break;
+      case 'goNext':
+        startNewRound();
+        break;
+      case 'gameOver':
+        renderResult(myWords, remoteWords);
+        writeArea.style.display = 'none';
+        resultArea.style.display = 'block';
+        break;
+      case 'reset':
+        resetView();
+        break;
     }
   })
   conn.on('close', ()=>{
@@ -179,15 +187,26 @@ function bindConn(){
   conn.on('error',err=>showTip('通讯异常'))
 }
 
-//开启新一轮
+// 【只有房主调用这个】判断本轮两人都提交完成
+function checkRoundEndByCreator(){
+  const idx = currentRound - 1;
+  if(myRoundSubmit[idx] && remoteRoundSubmit[idx]){
+    if(currentRound >= TOTAL_ROUND){
+      conn.send({type:'gameOver'});
+      renderResult(myWords, remoteWords);
+      writeArea.style.display = 'none';
+      resultArea.style.display = 'block';
+    }else{
+      conn.send({type:'goNext'});
+      startNewRound();
+    }
+  }
+}
+
 function startNewRound(){
   clearInterval(timer);
   currentRound ++;
   if(currentRound > TOTAL_ROUND){
-    conn.send({type:'showFinal'});
-    renderResult(myWords, remoteWords);
-    writeArea.style.display = 'none';
-    resultArea.style.display = 'block';
     return;
   }
   curRoundLabel.innerText = `第 ${currentRound} 轮，请输入词语`;
@@ -199,7 +218,6 @@ function startNewRound(){
     remainSec --;
     countBox.innerText = `⏱ ${remainSec} 秒`;
     if(remainSec <= 0){
-      //超时自动提交
       if(!myRoundSubmit[currentRound-1]){
         submitRound();
       }
@@ -207,7 +225,6 @@ function startNewRound(){
   },1000);
 }
 
-//提交本轮
 function submitRound(){
   clearInterval(timer);
   countBox.innerText='';
@@ -218,26 +235,12 @@ function submitRound(){
   submitBtn.disabled = true;
   conn.send({type:'roundData', roundIdx:idx, word:w});
   showTip("✅本轮已提交，等待对方");
-  checkRoundEnd();
-}
-
-//判断本轮两个人是否都提交
-function checkRoundEnd(){
-  const idx = currentRound -1;
-  if(myRoundSubmit[idx] && remoteRoundSubmit[idx]){
-    if(currentRound >= TOTAL_ROUND){
-      conn.send({type:'showFinal'});
-      renderResult(myWords, remoteWords);
-      writeArea.style.display = 'none';
-      resultArea.style.display = 'block';
-    }else{
-      conn.send({type:'nextRound'});
-      startNewRound();
-    }
+  // 加入方不能判断回合结束！只有房主判断
+  if(isCreator){
+    checkRoundEndByCreator();
   }
 }
 
-//渲染全部8轮结果
 function renderResult(p1,p2){
   resContainer.innerHTML = '';
   for(let i=0;i<TOTAL_ROUND;i++){
@@ -280,7 +283,9 @@ function resetView(){
   remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
   writeArea.style.display = 'block';
   resultArea.style.display = 'none';
-  conn.send({type:'startGame'}); //重置后重新发送开启游戏信号
+  if(isCreator){
+    conn.send({type:'startGame'});
+  }
 }
 </script>
 </body>

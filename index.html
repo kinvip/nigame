@@ -10,9 +10,10 @@ body{background:#f7f4ff;padding:20px;}
 .wrap{max-width:420px;margin:0 auto;background:#fff;border-radius:24px;padding:24px;box-shadow:0 4px 20px #00000008;}
 .title-top{color:#7b42d9;text-align:center;font-size:16px;margin-bottom:8px;}
 h1{text-align:center;font-size:28px;color:#222;margin-bottom:10px;}
-.info{text-align:center;color:#666;margin-bottom:24px;font-size:15px;}
-.tip{text-align:center;color:#e64340;margin:14px 0}
-.success-tip{text-align:center;color:#209c57;margin:14px 0}
+.info{text-align:center;color:#666;margin-bottom:12px;font-size:15px;}
+.countdown{text-align:center;font-size:22px;color:#d63031;font-weight:bold;margin:10px 0;}
+.tip{text-align:center;color:#e64340;margin:10px 0}
+.success-tip{text-align:center;color:#209c57;margin:10px 0}
 .round-item{margin-bottom:16px;}
 .round-label{font-size:14px;color:#777;margin-bottom:6px;}
 input{width:100%;padding:14px 12px;border-radius:14px;border:1px solid #e9e4f4;font-size:16px;outline:none;background:#f9f6ff;}
@@ -39,8 +40,10 @@ button:disabled{background:#c9b8e6;cursor:not-allowed;}
   <div class="title-top">SAME WORD · 同词相遇</div>
   <h1>你们的脑回路相遇了</h1>
   <div class="info" id="roomInfo">等待配对</div>
+  <div class="countdown" id="countBox"></div>
   <div class="tip" id="tipBox"></div>
   <div class="success-tip" id="successBox"></div>
+
   <!-- 开始界面 -->
   <div id="startArea" class="start-area">
     <button onclick="createPeer()">创建房间</button>
@@ -49,44 +52,18 @@ button:disabled{background:#c9b8e6;cursor:not-allowed;}
     <button onclick="joinPeer()">加入房间</button>
     <div id="keyShow" class="key-text" style="display:none"></div>
   </div>
-  <!-- 填词界面 -->
+
+  <!-- 单轮填词界面 -->
   <div id="writeArea" style="display:none">
     <div class="round-item">
-      <div class="round-label">第 1 轮</div>
-      <input class="word" data-index="0" placeholder="输入词语">
-    </div>
-    <div class="round-item">
-      <div class="round-label">第 2 轮</div>
-      <input class="word" data-index="1" placeholder="输入词语">
-    </div>
-    <div class="round-item">
-      <div class="round-label">第 3 轮</div>
-      <input class="word" data-index="2" placeholder="输入词语">
-    </div>
-    <div class="round-item">
-      <div class="round-label">第 4 轮</div>
-      <input class="word" data-index="3" placeholder="输入词语">
-    </div>
-    <div class="round-item">
-      <div class="round-label">第 5 轮</div>
-      <input class="word" data-index="4" placeholder="输入词语">
-    </div>
-    <div class="round-item">
-      <div class="round-label">第 6 轮</div>
-      <input class="word" data-index="5" placeholder="输入词语">
-    </div>
-    <div class="round-item">
-      <div class="round-label">第 7 轮</div>
-      <input class="word" data-index="6" placeholder="输入词语">
-    </div>
-    <div class="round-item">
-      <div class="round-label">第 8 轮</div>
-      <input class="word" data-index="7" placeholder="输入词语">
+      <div class="round-label" id="curRoundLabel">第 1 轮，请输入词语</div>
+      <input id="curInput" placeholder="在这里输入本轮词语">
     </div>
     <div class="btn-box">
-      <button id="submitBtn" onclick="submitAll()">提交全部词语</button>
+      <button id="submitBtn" onclick="submitRound()">提交本轮</button>
     </div>
   </div>
+
   <!-- 结果界面 -->
   <div class="result-box" id="resultArea">
     <div class="result-title">你们的脑回路相遇了</div>
@@ -98,13 +75,20 @@ button:disabled{background:#c9b8e6;cursor:not-allowed;}
     </div>
   </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <script>
 let peer, conn;
-let myWords = Array(8).fill('');
-let remoteWords = null;
-let mySubmitted = false;
-let remoteSubmitted = false;
+const TOTAL_ROUND = 8;
+const ROUND_TIME = 30; //每轮倒计时秒数
+let currentRound = 0;
+let myWords = Array(TOTAL_ROUND).fill('');
+let remoteWords = Array(TOTAL_ROUND).fill('');
+let myRoundSubmit = Array(TOTAL_ROUND).fill(false);
+let remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
+let timer = null;
+let remainSec = 0;
+
 const tipBox = document.getElementById('tipBox');
 const successBox = document.getElementById('successBox');
 const roomInfo = document.getElementById('roomInfo');
@@ -114,6 +98,10 @@ const resultArea = document.getElementById('resultArea');
 const resContainer = document.getElementById('res-container');
 const submitBtn = document.getElementById('submitBtn');
 const keyShow = document.getElementById('keyShow');
+const countBox = document.getElementById('countBox');
+const curRoundLabel = document.getElementById('curRoundLabel');
+const curInput = document.getElementById('curInput');
+
 function showTip(text){
   tipBox.innerText = text;
   setTimeout(()=>tipBox.innerText='',2500);
@@ -122,6 +110,7 @@ function showSuccess(text){
   successBox.innerText = text;
   setTimeout(()=>successBox.innerText='',2500);
 }
+
 // 创建房间
 function createPeer(){
   peer = new Peer();
@@ -134,14 +123,16 @@ function createPeer(){
   peer.on('connection', (c)=>{
     conn = c;
     bindConn();
-    showSuccess('✅ 好友连上啦，可以填词！');
+    showSuccess('✅ 好友连上啦！游戏即将开始');
     startArea.style.display = 'none';
     writeArea.style.display = 'block';
+    startNewRound();
   })
   peer.on('error', err=>{
     showTip('连接失败：'+err.type);
   })
 }
+
 // 加入房间
 function joinPeer(){
   const rid = document.getElementById('inputKey').value.trim();
@@ -152,48 +143,99 @@ function joinPeer(){
     bindConn();
   })
 }
+
 function bindConn(){
   conn.on('open', ()=>{
-    showSuccess('✅ 配对成功！');
+    showSuccess('✅ 配对成功！游戏即将开始');
     startArea.style.display = 'none';
     writeArea.style.display = 'block';
+    startNewRound();
   })
   conn.on('data', (data)=>{
-    if(data.type === 'word'){
-      remoteWords = data.words;
-      remoteSubmitted = true;
-      showTip('对方已经提交！');
-      checkShowResult();
+    if(data.type === 'roundData'){
+      remoteWords[data.roundIdx] = data.word;
+      remoteRoundSubmit[data.roundIdx] = true;
+      checkRoundEnd();
+    }else if(data.type === 'nextRound'){
+      startNewRound();
+    }else if(data.type === 'showFinal'){
+      renderResult(myWords, remoteWords);
+      writeArea.style.display = 'none';
+      resultArea.style.display = 'block';
     }else if(data.type === 'reset'){
       resetView();
     }
   })
   conn.on('close', ()=>{
+    clearInterval(timer);
+    countBox.innerText='';
     showTip('对方断开连接了');
   })
   conn.on('error',err=>showTip('通讯异常'))
 }
-// 提交词语
-function submitAll(){
-  const inputs = document.querySelectorAll('.word');
-  myWords = Array(8).fill('');
-  inputs.forEach((el,idx)=> myWords[idx] = el.value.trim());
-  conn.send({type:'word', words:myWords});
-  mySubmitted = true;
-  submitBtn.disabled = true;
-  showTip('✅ 已提交，等待对方！');
-  checkShowResult();
-}
-function checkShowResult(){
-  if(mySubmitted && remoteSubmitted){
+
+//开启新一轮
+function startNewRound(){
+  clearInterval(timer);
+  currentRound ++;
+  if(currentRound > TOTAL_ROUND){
+    conn.send({type:'showFinal'});
     renderResult(myWords, remoteWords);
     writeArea.style.display = 'none';
     resultArea.style.display = 'block';
+    return;
+  }
+  curRoundLabel.innerText = `第 ${currentRound} 轮，请输入词语`;
+  curInput.value = '';
+  submitBtn.disabled = false;
+  remainSec = ROUND_TIME;
+  countBox.innerText = `⏱ ${remainSec} 秒`;
+  timer = setInterval(()=>{
+    remainSec --;
+    countBox.innerText = `⏱ ${remainSec} 秒`;
+    if(remainSec <= 0){
+      //超时自动提交
+      if(!myRoundSubmit[currentRound-1]){
+        submitRound();
+      }
+    }
+  },1000);
+}
+
+//提交本轮
+function submitRound(){
+  clearInterval(timer);
+  countBox.innerText='';
+  const w = curInput.value.trim();
+  const idx = currentRound -1;
+  myWords[idx] = w;
+  myRoundSubmit[idx] = true;
+  submitBtn.disabled = true;
+  conn.send({type:'roundData', roundIdx:idx, word:w});
+  showTip("✅本轮已提交，等待对方");
+  checkRoundEnd();
+}
+
+//判断本轮两个人是否都提交
+function checkRoundEnd(){
+  const idx = currentRound -1;
+  if(myRoundSubmit[idx] && remoteRoundSubmit[idx]){
+    if(currentRound >= TOTAL_ROUND){
+      conn.send({type:'showFinal'});
+      renderResult(myWords, remoteWords);
+      writeArea.style.display = 'none';
+      resultArea.style.display = 'block';
+    }else{
+      conn.send({type:'nextRound'});
+      startNewRound();
+    }
   }
 }
+
+//渲染全部8轮结果
 function renderResult(p1,p2){
   resContainer.innerHTML = '';
-  for(let i=0;i<8;i++){
+  for(let i=0;i<TOTAL_ROUND;i++){
     let v1 = p1[i] || '—';
     let v2 = p2[i] || '—';
     let isSame = v1 === v2 && v1 !== '—';
@@ -211,24 +253,29 @@ function renderResult(p1,p2){
     `
   }
   let matchCount = 0;
-  for(let i=0;i<8;i++){
+  for(let i=0;i<TOTAL_ROUND;i++){
     if(p1[i]&&p2[i]&&p1[i]===p2[i]) matchCount++;
   }
-  let rate = Math.round(matchCount/8*100);
-  document.getElementById('resultRoomInfo').innerText = `共 8 轮 · 匹配${matchCount}轮 · 默契度 ${rate}%`
+  let rate = Math.round(matchCount/TOTAL_ROUND*100);
+  document.getElementById('resultRoomInfo').innerText = `共 ${TOTAL_ROUND} 轮 · 匹配${matchCount}轮 · 默契度 ${rate}%`
 }
+
 function resetGame(){
   conn.send({type:'reset'});
   resetView();
 }
+
 function resetView(){
-  mySubmitted = false;
-  remoteSubmitted = false;
-  remoteWords = null;
-  document.querySelectorAll('.word').forEach(i=>i.value='');
-  submitBtn.disabled = false;
+  clearInterval(timer);
+  countBox.innerText='';
+  currentRound = 0;
+  myWords = Array(TOTAL_ROUND).fill('');
+  remoteWords = Array(TOTAL_ROUND).fill('');
+  myRoundSubmit = Array(TOTAL_ROUND).fill(false);
+  remoteRoundSubmit = Array(TOTAL_ROUND).fill(false);
   writeArea.style.display = 'block';
   resultArea.style.display = 'none';
+  startNewRound();
 }
 </script>
 </body>

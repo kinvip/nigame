@@ -33,6 +33,7 @@ button:disabled{background:#c9b8e6;cursor:not-allowed;}
 .start-area{text-align:center;margin-top:30px;}
 .room-input{width:70%;display:inline-block;margin-bottom:12px;}
 .key-text{word-break:break-all;padding:10px;background:#f3f0ff;border-radius:12px;margin:10px 0;font-size:14px;}
+.alert-load{color:red;text-align:center;margin:10px;}
 </style>
 </head>
 <body>
@@ -40,6 +41,7 @@ button:disabled{background:#c9b8e6;cursor:not-allowed;}
   <div class="title-top">SAME WORD · 同词相遇</div>
   <h1>你们的脑回路相遇了</h1>
   <div class="info" id="roomInfo">等待配对</div>
+  <div class="alert-load" id="loadAlert">🔄正在加载联机组件...</div>
   <div class="countdown" id="countBox"></div>
   <div class="tip" id="tipBox"></div>
   <div class="success-tip" id="successBox"></div>
@@ -76,7 +78,11 @@ button:disabled{background:#c9b8e6;cursor:not-allowed;}
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<!-- 使用jsdelivr国内镜像CDN -->
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"
+onload="document.getElementById('loadAlert').innerText='✅联机组件加载完成'"
+onerror="document.getElementById('loadAlert').innerText='❌联机库加载失败！网络问题，请换网络/浏览器'"></script>
+
 <script>
 let peer, conn;
 const TOTAL_ROUND = 8;
@@ -113,6 +119,10 @@ function showSuccess(text){
 
 // 创建房间
 function createPeer(){
+  if(typeof Peer === 'undefined'){
+    showTip('PeerJS没有加载成功！刷新页面重试');
+    return;
+  }
   peer = new Peer();
   peer.on('open', (id)=>{
     roomInfo.innerText = `你的密钥：${id}`;
@@ -135,6 +145,10 @@ function createPeer(){
 
 // 加入房间
 function joinPeer(){
+  if(typeof Peer === 'undefined'){
+    showTip('PeerJS没有加载成功！刷新页面重试');
+    return;
+  }
   const rid = document.getElementById('inputKey').value.trim();
   if(!rid) return showTip('请粘贴密钥');
   peer = new Peer();
@@ -179,7 +193,7 @@ function startNewRound(){
   clearInterval(timer);
   currentRound ++;
   if(currentRound > TOTAL_ROUND){
-    conn.send({type:'showFinal'});
+    if(conn) conn.send({type:'showFinal'});
     renderResult(myWords, remoteWords);
     writeArea.style.display = 'none';
     resultArea.style.display = 'block';
@@ -195,7 +209,8 @@ function startNewRound(){
     countBox.innerText = `⏱ ${remainSec} 秒`;
     if(remainSec <= 0){
       //超时自动提交
-      if(!myRoundSubmit[currentRound-1]){
+      const idx = currentRound-1;
+      if(!myRoundSubmit[idx]){
         submitRound();
       }
     }
@@ -211,7 +226,7 @@ function submitRound(){
   myWords[idx] = w;
   myRoundSubmit[idx] = true;
   submitBtn.disabled = true;
-  conn.send({type:'roundData', roundIdx:idx, word:w});
+  if(conn) conn.send({type:'roundData', roundIdx:idx, word:w});
   showTip("✅本轮已提交，等待对方");
   checkRoundEnd();
 }
@@ -221,12 +236,12 @@ function checkRoundEnd(){
   const idx = currentRound -1;
   if(myRoundSubmit[idx] && remoteRoundSubmit[idx]){
     if(currentRound >= TOTAL_ROUND){
-      conn.send({type:'showFinal'});
+      if(conn) conn.send({type:'showFinal'});
       renderResult(myWords, remoteWords);
       writeArea.style.display = 'none';
       resultArea.style.display = 'block';
     }else{
-      conn.send({type:'nextRound'});
+      if(conn) conn.send({type:'nextRound'});
       startNewRound();
     }
   }
@@ -261,7 +276,7 @@ function renderResult(p1,p2){
 }
 
 function resetGame(){
-  conn.send({type:'reset'});
+  if(conn) conn.send({type:'reset'});
   resetView();
 }
 
